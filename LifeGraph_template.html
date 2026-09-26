@@ -1,0 +1,1868 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ライフラインチャート</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --pos:            #2a78d6;   /* diverging: blue = プラス */
+    --neg:            #e34948;   /* diverging: red  = マイナス */
+    --band-wash:      rgba(137,135,129,0.10);
+    --line-ink:       #0b0b0b;
+    --chip-now-ring:  #eda100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --pos:            #3987e5;
+      --neg:            #e66767;
+      --band-wash:      rgba(195,194,183,0.08);
+      --line-ink:       #ffffff;
+      --chip-now-ring:  #c98500;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  header h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+  }
+  header .sub {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin: 0 0 12px;
+  }
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .era-btn {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .era-popup {
+    margin-top: 10px;
+    margin-bottom: 12px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    max-width: 360px;
+  }
+  .era-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .era-popup-close {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .era-popup-body {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .era-popup-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  table.era-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  table.era-table th, table.era-table td {
+    text-align: left;
+    padding: 3px 8px;
+    border-bottom: 1px solid var(--gridline);
+  }
+  table.era-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 11px;
+    position: sticky;
+    top: 0;
+    background: var(--surface-1);
+  }
+  .privacy-note {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .chart-scroll {
+    overflow-x: auto;
+  }
+  svg#chart {
+    width: 100%;
+    min-width: 1080px;
+    height: auto;
+    display: block;
+  }
+  .key {
+    display: flex;
+    gap: 18px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+  }
+  .key span { display: inline-flex; align-items: center; gap: 6px; }
+  .key i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .key .i-pos { background: var(--pos); }
+  .key .i-neg { background: var(--neg); }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    max-width: 240px;
+    opacity: 0;
+    transition: opacity 0.08s;
+    z-index: 10;
+  }
+  .tooltip .t-period { color: var(--text-muted); font-size: 11px; }
+  .tooltip .t-event { color: var(--text-primary); font-weight: 600; margin: 2px 0 4px; }
+  .tooltip .t-badge {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    color: #fff;
+  }
+  .tooltip .t-hint { color: var(--text-muted); font-size: 10px; margin-top: 4px; }
+
+  .point-hit { cursor: pointer; }
+  .point-hit:focus { outline: none; }
+  .point-hit:focus circle.ring { stroke: var(--chip-now-ring); stroke-width: 3px; }
+
+  #detailPanel h2 {
+    font-size: 16px;
+    margin: 0 0 2px;
+  }
+  #detailPanel .d-period {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  #detailPanel .d-type {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--band-wash);
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+  #detailPanel h3 {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 14px 0 4px;
+    font-weight: 600;
+  }
+  #detailPanel p { margin: 0 0 6px; font-size: 14px; }
+  #detailPanel .placeholder { color: var(--text-muted); font-size: 13px; }
+  .detail-edit-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .detail-edit-form[hidden] { display: none; }
+  .detail-edit-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .detail-edit-form textarea,
+  .detail-edit-form input[type="text"] {
+    width: 100%;
+    min-height: 54px;
+    resize: vertical;
+    padding: 6px 7px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font: inherit;
+    box-sizing: border-box;
+  }
+  .detail-edit-form input[type="text"] {
+    min-height: 0;
+  }
+
+  .quote-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--pos);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .quote-card .quote {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+  .quote-card p { font-size: 13px; color: var(--text-secondary); margin: 0 0 8px; }
+
+  .table-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .table-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 10px 0 4px;
+  }
+  .save-status {
+    font-size: 11px;
+    color: var(--text-muted);
+    transition: opacity 0.3s;
+  }
+  .add-row-form {
+    display: flex;
+    align-items: end;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding: 10px;
+    background: var(--band-wash);
+    border-radius: 8px;
+  }
+  .add-row-form[hidden] { display: none; }
+  .add-row-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .add-row-form input {
+    min-width: 90px;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font: inherit;
+  }
+  .add-row-form input.add-event { min-width: 220px; }
+  .profile-form {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .profile-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .profile-form input {
+    width: 110px;
+    padding: 6px 7px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font: inherit;
+  }
+  .profile-record {
+    margin: 8px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+  .data-transfer {
+    margin-top: 10px;
+  }
+  .data-transfer input[type="file"] { display: none; }
+
+  table#dataTable, table#primaryDataTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  table#dataTable th, table#dataTable td,
+  table#primaryDataTable th, table#primaryDataTable td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--gridline);
+    vertical-align: top;
+  }
+  table#dataTable th, table#primaryDataTable th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 11px;
+  }
+  table#dataTable td.col-age, table#primaryDataTable td.col-age { width: 70px; }
+  table#dataTable td.col-value, table#primaryDataTable td.col-value { width: 80px; }
+  table#dataTable td.col-type, table#primaryDataTable td.col-type { width: 140px; }
+  table#dataTable td.col-action, table#primaryDataTable td.col-action { width: 70px; }
+  table#dataTable input, table#primaryDataTable input,
+  table#primaryDataTable select {
+    width: 100%;
+    box-sizing: border-box;
+    background: transparent;
+    color: var(--text-primary);
+    border: none;
+    border-bottom: 1px solid transparent;
+    padding: 3px 2px;
+    font: inherit;
+  }
+  table#dataTable input:hover, table#primaryDataTable input:hover,
+  table#primaryDataTable select:hover {
+    border-bottom-color: var(--gridline);
+  }
+  table#dataTable input:focus, table#primaryDataTable input:focus,
+  table#primaryDataTable select:focus {
+    outline: none;
+    border-bottom-color: var(--pos);
+  }
+
+  #toggleTableBtn, #resetBtn, #addRowBtn, #savePngBtn, #applyProfileBtn,
+  #exportJsonBtn, #importJsonBtn,
+  #addPrimaryBtn, #confirmPrimaryBtn, #editDetailBtn, #saveDetailBtn, #cancelDetailBtn,
+  .row-delete-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .row-delete-btn { padding: 4px 8px; font-size: 11px; }
+  #tableWrap { display: none; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="card" id="profileCard">
+  <div class="profile-form">
+    <label>チャートタイトル
+      <input id="chartTitleInput" type="text" value="ライフラインチャート" placeholder="例：私のライフラインチャート">
+    </label>
+    <label>生まれ年
+      <input id="birthYear" type="number" min="1800" max="2200" step="1" placeholder="例：1990">
+    </label>
+    <label>開始年齢
+      <input id="rangeStart" type="number" min="0" max="120" step="0.1" value="0">
+    </label>
+    <label>終了年齢
+      <input id="rangeEnd" type="number" min="1" max="120" step="0.1" value="55">
+    </label>
+    <button id="applyProfileBtn" type="button">記録を更新</button>
+  </div>
+  <p id="profileRecord" class="profile-record"></p>
+  <div class="table-toolbar data-transfer">
+    <button id="exportJsonBtn" type="button">JSONエクスポート</button>
+    <button id="importJsonBtn" type="button">JSONインポート</button>
+    <input id="importJsonFile" type="file" accept="application/json,.json">
+    <span id="transferStatus" class="save-status"></span>
+  </div>
+</div>
+
+<header>
+  <div class="title-row">
+    <h1 id="chartTitle">ライフラインチャート</h1>
+    <button id="eraTableBtn" type="button" class="era-btn">西暦・和暦対応表</button>
+  </div>
+  <p class="sub" id="chartSubtitle">横軸＝年齢、縦軸＝幸福度（推定）</p>
+  <div id="eraTablePopup" class="era-popup" hidden>
+    <div class="era-popup-header">
+      <strong>西暦・和暦 対応表</strong>
+      <button id="closeEraTableBtn" type="button" class="era-popup-close">閉じる</button>
+    </div>
+    <div id="eraTableBody" class="era-popup-body"></div>
+  </div>
+</header>
+
+<div class="privacy-note">
+  本ページは、人生の出来事とその時々の幸福度を記録するための汎用テンプレートです。入力した内容は、このブラウザのlocalStorageに保存されます。<br>
+  幸福度の数値は主観的な記録です。必要に応じて自由に調整してください。
+</div>
+
+<div class="card">
+  <div class="table-toolbar">
+    <button id="savePngBtn" type="button">PNGで保存</button>
+  </div>
+  <div class="chart-scroll">
+    <svg id="chart" viewBox="0 0 960 560" role="img" aria-label="幸福度の推移を示す折れ線チャート"></svg>
+  </div>
+  <div class="key">
+    <span><i class="i-pos"></i>幸福度プラス</span>
+    <span><i class="i-neg"></i>幸福度マイナス</span>
+    <span>点にカーソルを合わせる、またはクリック／Enterで詳細を表示</span>
+  </div>
+</div>
+
+<div class="card" id="primaryEventCard">
+  <h2>ライフラインイベント（一次情報）</h2>
+  <p class="table-note">誕生、入学、卒業、転職、結婚、離婚、出産など、事実として記録するイベントを登録します。プライベート／仕事の区分と幸福度の極性を設定すると、グラフ上に縦点線で表示されます。</p>
+  <div class="table-toolbar">
+    <button id="addPrimaryBtn" type="button">＋ 一次イベントを追加</button>
+    <span id="primarySaveStatus" class="save-status"></span>
+  </div>
+  <div id="primaryAddForm" class="add-row-form" hidden>
+    <label>年齢
+      <input id="primaryNewAge" type="number" min="0" max="55" step="0.1" value="0" inputmode="decimal">
+    </label>
+    <label>年次・時期
+      <input id="primaryNewPeriod" type="text" placeholder="例：2003年">
+    </label>
+    <label>イベント
+      <input id="primaryNewEvent" class="add-event" type="text" placeholder="例：大学卒業">
+    </label>
+    <label>区分
+      <select id="primaryNewCategory">
+        <option value="private">プライベート</option>
+        <option value="work">仕事</option>
+      </select>
+    </label>
+    <label>幸福度
+      <select id="primaryNewPolarity">
+        <option value="positive">プラス</option>
+        <option value="negative">マイナス</option>
+        <option value="neutral">中立</option>
+      </select>
+    </label>
+    <button id="confirmPrimaryBtn" type="button">この内容で追加</button>
+  </div>
+  <table id="primaryDataTable">
+    <thead><tr><th>年齢</th><th>年次・時期</th><th>イベント</th><th>区分</th><th>幸福度</th><th>操作</th></tr></thead>
+    <tbody id="primaryDataTableBody"></tbody>
+  </table>
+</div>
+
+<div class="card" id="detailPanel">
+  <h2 id="d-title">詳細</h2>
+  <div class="d-period" id="d-period"></div>
+  <div class="d-type" id="d-type" style="display:none;"></div>
+  <div class="table-toolbar">
+    <button id="editDetailBtn" type="button" style="display:none;">詳細を編集</button>
+  </div>
+  <p class="placeholder" id="d-placeholder">チャート上の点をクリック（またはTabキーで選択してEnter）すると、深掘りした内容がここに表示されます。「詳細を編集」から書き込み・保存できます。</p>
+  <div id="d-body" style="display:none;">
+    <p id="d-summary"></p>
+    <div id="d-why-wrap" style="display:none;"><h3>何がこの幸福度につながったか</h3><p id="d-why"></p></div>
+    <div id="d-overcome-wrap" style="display:none;"><h3>乗り越えたきっかけ・意味づけ</h3><p id="d-overcome"></p></div>
+    <div id="d-values-wrap" style="display:none;"><h3>そこから見える価値観・信条</h3><p id="d-values"></p></div>
+    <div id="d-note-wrap" style="display:none;"><h3>補足</h3><p id="d-note"></p></div>
+    <div id="d-related-wrap" style="display:none;"><h3>関連する出来事</h3><p id="d-related"></p></div>
+  </div>
+  <div id="detailEditForm" class="detail-edit-form" hidden>
+    <label>概要・コメント<textarea id="editSummary"></textarea></label>
+    <label>何がこの幸福度につながったか<textarea id="editWhy"></textarea></label>
+    <label>乗り越えたきっかけ・意味づけ<textarea id="editOvercome"></textarea></label>
+    <label>そこから見える価値観・信条<textarea id="editValues"></textarea></label>
+    <label>補足<textarea id="editNote"></textarea></label>
+    <label>関連する出来事<textarea id="editRelated"></textarea></label>
+    <div class="table-toolbar">
+      <button id="saveDetailBtn" type="button">詳細を保存</button>
+      <button id="cancelDetailBtn" type="button">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>詳細ライフラインイベント（幸福度の推移）</h2>
+  <div class="table-toolbar">
+    <button id="toggleTableBtn" type="button">テーブル表示を切り替え</button>
+    <button id="addRowBtn" type="button">＋ 行を追加</button>
+    <button id="resetBtn" type="button">初期値にリセット</button>
+    <span id="saveStatus" class="save-status"></span>
+  </div>
+  <div id="addRowForm" class="add-row-form" hidden>
+    <label>年齢
+      <input id="newAge" type="number" min="0" max="55" step="0.1" value="0" inputmode="decimal">
+    </label>
+    <label>時期・年次
+      <input id="newPeriod" type="text" placeholder="例：2026年／30歳頃">
+    </label>
+    <label>出来事
+      <input id="newEvent" class="add-event" type="text" placeholder="例：新しい出来事">
+    </label>
+    <button id="confirmAddRowBtn" type="button">この内容で追加</button>
+  </div>
+  <div id="tableWrap">
+    <p class="table-note">セルをクリックして編集できます（Enterまたはフォーカスを外すと反映）。「＋ 行を追加」で任意の年齢・時期・年次の出来事を指定して追加できます。「年齢」を変えるとグラフ上の横位置も変わります。各行右端の「削除」で行を削除できます（削除はもう一度クリックで確定）。変更はこのブラウザに自動保存され、次回この端末・このブラウザで開いたときも復元されます（ファイル自体は書き換わりません）。</p>
+    <table id="dataTable">
+      <thead>
+        <tr><th>年齢</th><th>時期</th><th>出来事</th><th>幸福度（推定）</th><th>種別</th><th>操作</th></tr>
+      </thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="quote-card" id="quoteCard">
+  <div class="table-toolbar">
+    <button id="editQuoteBtn" type="button">この文章を編集</button>
+  </div>
+  <div id="quoteDisplay">
+    <p class="quote" id="quoteHeadline"></p>
+    <div id="quoteBodyDisplay"></div>
+  </div>
+  <div id="quoteEditForm" class="detail-edit-form" hidden>
+    <label>見出し
+      <input id="editQuoteHeadline" type="text">
+    </label>
+    <label>本文（改行すると段落が分かれます）
+      <textarea id="editQuoteBody" style="min-height: 90px;"></textarea>
+    </label>
+    <div class="table-toolbar">
+      <button id="saveQuoteBtn" type="button">保存</button>
+      <button id="cancelQuoteBtn" type="button">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "lifelineChart_generic_state_v1";
+  var PROFILE_STORAGE_KEY = "lifelineChart_generic_profile_v1";
+  var PRIMARY_STORAGE_KEY = "lifelineChart_generic_primary_v1";
+
+  function loadProfile() {
+    // 生まれ年は初期状態では設定しない。利用者が必要に応じて入力する。
+    var defaults = { title: "ライフラインチャート", birthYear: "", rangeStart: 0, rangeEnd: 55 };
+    try {
+      var raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+      if (!raw) return defaults;
+      var p = JSON.parse(raw);
+      return {
+        title: p && typeof p.title === "string" && p.title ? p.title : defaults.title,
+        birthYear: p && typeof p.birthYear === "string" ? p.birthYear : defaults.birthYear,
+        rangeStart: p && typeof p.rangeStart === "number" ? p.rangeStart : defaults.rangeStart,
+        rangeEnd: p && typeof p.rangeEnd === "number" ? p.rangeEnd : defaults.rangeEnd
+      };
+    } catch (e) {
+      return defaults;
+    }
+  }
+
+  var profile = loadProfile();
+
+  // ── 一次情報イベントの初期サンプル ─────────────────────────
+  // 汎用テンプレートとして、書き換え・削除・追加できる架空のサンプルを入れておく。
+  var BUILTIN_PRIMARY_DATA = [
+    { age: 0,  event: "誕生",       category: "private", polarity: "positive" },
+    { age: 6,  event: "小学校入学", category: "private", polarity: "neutral" },
+    { age: 12, event: "中学校入学", category: "private", polarity: "neutral" },
+    { age: 15, event: "高校入学",   category: "private", polarity: "neutral" },
+    { age: 18, event: "大学入学",   category: "private", polarity: "positive" },
+    { age: 22, event: "大学卒業",   category: "private", polarity: "neutral" },
+    { age: 22, event: "就職",       category: "work",    polarity: "positive" },
+    { age: 30, event: "生活の節目", category: "private", polarity: "positive" },
+    { age: 30, event: "仕事の節目", category: "work",    polarity: "neutral" },
+    { age: 35, event: "新しい活動", category: "private", polarity: "positive" },
+    { age: 36, event: "次の目標",   category: "work",    polarity: "neutral" }
+  ];
+  BUILTIN_PRIMARY_DATA.forEach(function (d, i) {
+    d.id = "pb" + i; d.custom = false; d.periodAuto = true; d.period = "";
+  });
+
+  function loadPrimaryState() {
+    try {
+      var raw = localStorage.getItem(PRIMARY_STORAGE_KEY);
+      if (!raw) return { overrides: {}, deletedIds: [], customRows: [] };
+      var s = JSON.parse(raw);
+      return {
+        overrides: (s && s.overrides) || {},
+        deletedIds: (s && s.deletedIds) || [],
+        customRows: (s && s.customRows) || []
+      };
+    } catch (e) {
+      return { overrides: {}, deletedIds: [], customRows: [] };
+    }
+  }
+
+  // BUILTIN_PRIMARY_DATA + localStorage の差分 から PRIMARY_DATA を年齢順に組み立て直す。
+  // periodAuto が true の行は、時期を保存値ではなく「年齢＋生まれ年」から毎回計算し直す。
+  function rebuildPrimaryData(state) {
+    var s = state || loadPrimaryState();
+    var deletedSet = {};
+    s.deletedIds.forEach(function (id) { deletedSet[id] = true; });
+    var next = [];
+    BUILTIN_PRIMARY_DATA.forEach(function (b) {
+      if (deletedSet[b.id]) return;
+      var o = s.overrides[b.id];
+      var age = o && typeof o.age === "number" ? o.age : b.age;
+      var periodAuto = o && typeof o.periodAuto === "boolean" ? o.periodAuto : b.periodAuto;
+      var period = periodAuto ? yearForAge(age) : (o && typeof o.period === "string" ? o.period : b.period);
+      next.push({
+        id: b.id, custom: false,
+        age: age,
+        period: period,
+        event: o && typeof o.event === "string" ? o.event : b.event,
+        category: o && (o.category === "work" || o.category === "private") ? o.category : b.category,
+        polarity: o && (o.polarity === "positive" || o.polarity === "negative" || o.polarity === "neutral") ? o.polarity : b.polarity,
+        periodAuto: periodAuto
+      });
+    });
+    s.customRows.forEach(function (c) {
+      var age = typeof c.age === "number" ? c.age : 0;
+      var periodAuto = c.periodAuto === true;
+      var period = periodAuto ? yearForAge(age) : (c.period || "");
+      next.push({
+        id: c.id, custom: true,
+        age: age,
+        period: period,
+        event: c.event || "新しいイベント",
+        category: c.category === "work" ? "work" : "private",
+        polarity: c.polarity === "negative" || c.polarity === "neutral" ? c.polarity : "positive",
+        periodAuto: periodAuto
+      });
+    });
+    next.sort(function (a, b) { return a.age - b.age; });
+    return next;
+  }
+
+  var PRIMARY_DATA = rebuildPrimaryData();
+
+  // 汎用テンプレート版の架空のサンプルデータ。書き換え・削除・追加ができる。
+  var BUILTIN_DATA = [
+    { age: 0, period: "", event: "誕生", value: 0, type: "出来事",
+      detail: { summary: "これはサンプルです。ご自身の出来事に書き換えたり、行を削除・追加したりできます。" } },
+    { age: 12, period: "", event: "部活動に打ち込む", value: 5, type: "山",
+      detail: { summary: "サンプル：熱中できるものが見つかった時期。",
+        why: "サンプル：仲間と共通の目標に向かって取り組めたこと。" } },
+    { age: 18, period: "", event: "大学入学", value: 6, type: "山",
+      detail: { summary: "サンプル：新しい環境での学びが始まった時期。" } },
+    { age: 22, period: "", event: "就職", value: 7, type: "山",
+      detail: { summary: "サンプル：社会人としての一歩を踏み出した時期。" } },
+    { age: 28, period: "", event: "仕事で行き詰まりを感じる", value: -4, type: "谷〜転機",
+      detail: { summary: "サンプル：働き方を見直すきっかけがあった時期。",
+        overcome: "サンプル：周囲に相談しながら次の一歩を決めた。" } },
+    { age: 30, period: "", event: "生活と仕事の節目", value: 8, type: "山",
+      detail: { summary: "サンプル：いくつかの変化が重なった時期。" } },
+    { age: 35, period: "", event: "新しい活動を始める", value: 9, type: "山（最大）",
+      detail: { summary: "サンプル：新しい経験から喜びを得た時期。" } },
+    { age: 36, period: "", event: "次の目標に挑戦", value: 2, type: "つながり",
+      detail: { summary: "サンプル：新たな挑戦を選んだ時期。" } },
+    { age: 40, period: "", event: "現在", value: 3, type: "現在",
+      detail: { summary: "サンプル：ここまでの歩みを振り返り、これからを考えている。" } }
+  ];
+  BUILTIN_DATA.forEach(function (d, i) { d.id = "b" + i; d.custom = false; d.periodAuto = true; });
+
+  // 汎用テンプレート版では特定の年齢帯を前提にした背景バンドは持たない。
+  var BAND = null;
+  var idCounter = 0;
+  function newId() { idCounter += 1; return "c" + Date.now().toString(36) + idCounter; }
+
+  // ── スケール ────────────────────────────────────────────────
+  var W = 1440, H = 560;   // 横幅は元の960から1.5倍に拡張
+  var MARGIN = { top: 28, right: 24, bottom: 46, left: 46 };
+  var innerW = W - MARGIN.left - MARGIN.right;
+  var innerH = H - MARGIN.top - MARGIN.bottom;
+  var AGE_START = profile.rangeStart, AGE_MAX = profile.rangeEnd, Y_MIN = -20, Y_MAX = 20;
+
+  function scaleX(age) { return MARGIN.left + ((age - AGE_START) / (AGE_MAX - AGE_START)) * innerW; }
+  function scaleY(value) { return MARGIN.top + innerH - ((value - Y_MIN) / (Y_MAX - Y_MIN)) * innerH; }
+  var zeroY = scaleY(0);
+
+  var svgns = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    var e = document.createElementNS(svgns, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // Catmull-Rom → 3次ベジェ変換で、直線ではなく滑らかな曲線のパスを作る
+  function buildSmoothPath(points) {
+    if (points.length < 2) return "";
+    var d = "M " + points[0].x + " " + points[0].y;
+    for (var i = 0; i < points.length - 1; i++) {
+      var p0 = points[i - 1] || points[i];
+      var p1 = points[i];
+      var p2 = points[i + 1];
+      var p3 = points[i + 2] || p2;
+      var cp1x = p1.x + (p2.x - p0.x) / 6;
+      var cp1y = p1.y + (p2.y - p0.y) / 6;
+      var cp2x = p2.x - (p3.x - p1.x) / 6;
+      var cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += " C " + cp1x + " " + cp1y + ", " + cp2x + " " + cp2y + ", " + p2.x + " " + p2.y;
+    }
+    return d;
+  }
+
+  var svg = document.getElementById("chart");
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  var tooltip = document.getElementById("tooltip");
+  var chartCard = svg.closest(".card");
+  var selectedId = null;
+  var DATA = [];
+
+  var birthYearEl = document.getElementById("birthYear");
+  var chartTitleInputEl = document.getElementById("chartTitleInput");
+  var chartTitleEl = document.getElementById("chartTitle");
+  var rangeStartEl = document.getElementById("rangeStart");
+  var rangeEndEl = document.getElementById("rangeEnd");
+  var profileRecordEl = document.getElementById("profileRecord");
+  var chartSubtitleEl = document.getElementById("chartSubtitle");
+
+  function updateProfileDisplay() {
+    chartTitleInputEl.value = profile.title;
+    chartTitleEl.textContent = profile.title;
+    birthYearEl.value = profile.birthYear;
+    rangeStartEl.value = profile.rangeStart;
+    rangeEndEl.value = profile.rangeEnd;
+    var birthText = profile.birthYear ? profile.birthYear + "年生まれ" : "生年未設定";
+    var rangeText = profile.rangeStart + "歳〜" + profile.rangeEnd + "歳";
+    profileRecordEl.textContent = "記録：" + birthText + "｜対象年齢：" + rangeText;
+    chartSubtitleEl.textContent = rangeText + "｜横軸＝年齢、縦軸＝幸福度（推定）";
+    svg.setAttribute("aria-label", rangeText + "の幸福度の推移を示す折れ線チャート");
+    renderEraTable();
+  }
+
+  function birthYearNumber() {
+    var n = parseInt(profile.birthYear, 10);
+    return isNaN(n) ? null : n;
+  }
+
+  // ── 西暦・和暦 対応表 ─────────────────────────────────────
+  var ERA_TABLE = [
+    { name: "明治", start: 1868 },
+    { name: "大正", start: 1912 },
+    { name: "昭和", start: 1926 },
+    { name: "平成", start: 1989 },
+    { name: "令和", start: 2019 }
+  ];
+  function warekiForYear(year) {
+    for (var i = ERA_TABLE.length - 1; i >= 0; i--) {
+      if (year >= ERA_TABLE[i].start) {
+        var n = year - ERA_TABLE[i].start + 1;
+        return ERA_TABLE[i].name + (n === 1 ? "元年" : n + "年");
+      }
+    }
+    return "";
+  }
+  function renderEraTable() {
+    var body = document.getElementById("eraTableBody");
+    if (!body) return;
+    body.innerHTML = "";
+    var birthYear = birthYearNumber();
+    if (birthYear === null) {
+      var p = document.createElement("p");
+      p.className = "era-popup-empty";
+      p.textContent = "「生まれ年」を設定すると、年齢ごとの西暦・和暦の対応表が表示されます。";
+      body.appendChild(p);
+      return;
+    }
+    var startAge = Math.max(0, Math.ceil(AGE_START));
+    var endAge = Math.floor(AGE_MAX);
+    var table = document.createElement("table");
+    table.className = "era-table";
+    var thead = document.createElement("thead");
+    var headTr = document.createElement("tr");
+    ["年齢", "西暦", "和暦"].forEach(function (label) {
+      var th = document.createElement("th");
+      th.textContent = label;
+      headTr.appendChild(th);
+    });
+    thead.appendChild(headTr);
+    table.appendChild(thead);
+    var tbodyEl = document.createElement("tbody");
+    for (var age = startAge; age <= endAge; age++) {
+      var year = birthYear + age;
+      var tr = document.createElement("tr");
+      var c1 = document.createElement("td"); c1.textContent = age + "歳";
+      var c2 = document.createElement("td"); c2.textContent = year + "年";
+      var c3 = document.createElement("td"); c3.textContent = warekiForYear(year) || "―";
+      tr.appendChild(c1); tr.appendChild(c2); tr.appendChild(c3);
+      tbodyEl.appendChild(tr);
+    }
+    table.appendChild(tbodyEl);
+    body.appendChild(table);
+  }
+  document.getElementById("eraTableBtn").addEventListener("click", function () {
+    var popup = document.getElementById("eraTablePopup");
+    popup.hidden = !popup.hidden;
+    if (!popup.hidden) renderEraTable();
+  });
+  document.getElementById("closeEraTableBtn").addEventListener("click", function () {
+    document.getElementById("eraTablePopup").hidden = true;
+  });
+
+  function yearForAge(age) {
+    var birthYear = birthYearNumber();
+    if (birthYear === null) return age + "歳頃";
+    var year = birthYear + age;
+    return (Math.round(year) + (age % 1 === 0 ? "年" : "年頃"));
+  }
+
+  function refreshAutoPrimaryPeriods() {
+    PRIMARY_DATA.forEach(function (d) {
+      if (d.periodAuto) d.period = yearForAge(d.age);
+    });
+  }
+
+  function refreshAutoDataPeriods() {
+    DATA.forEach(function (d) {
+      if (d.periodAuto) d.period = yearForAge(d.age);
+    });
+  }
+
+  // 追加フォームの「年齢」欄に入力した時点で、「時期」欄に年齢に応じた西暦を自動でセットする。
+  // 「時期」欄をユーザーが直接編集したら、以後は自動上書きしない（dataset.auto で判定）。
+  function wireAutoPeriod(ageInput, periodInput) {
+    periodInput.dataset.auto = "1";
+    ageInput.addEventListener("input", function () {
+      if (periodInput.dataset.auto !== "1") return;
+      var a = parseFloat(ageInput.value);
+      if (isNaN(a)) return;
+      periodInput.value = yearForAge(a);
+    });
+    periodInput.addEventListener("input", function () {
+      periodInput.dataset.auto = "0";
+    });
+  }
+  function resetAutoPeriod(periodInput) {
+    periodInput.value = "";
+    periodInput.dataset.auto = "1";
+  }
+
+  function setTransferStatus(message) {
+    var status = document.getElementById("transferStatus");
+    status.textContent = message;
+    status.style.opacity = "1";
+    setTimeout(function () { status.style.opacity = "0"; }, 2500);
+  }
+
+  function exportJson() {
+    var payload = {
+      format: "lifeline-chart",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      profile: profile,
+      detailState: loadState(),
+      primaryEvents: PRIMARY_DATA
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.download = "ライフラインチャート.json";
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+    setTransferStatus("エクスポートしました");
+  }
+
+  function importJson(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var payload = JSON.parse(reader.result);
+        var importedProfile = payload && payload.profile;
+        var importedState = payload && payload.detailState;
+        var importedPrimary = payload && payload.primaryEvents;
+        var start = Number(importedProfile && importedProfile.rangeStart);
+        var end = Number(importedProfile && importedProfile.rangeEnd);
+        if (!payload || payload.format !== "lifeline-chart" || payload.version !== 1 ||
+            !importedState || typeof importedState !== "object" ||
+            !Number.isFinite(start) || !Number.isFinite(end) || end <= start ||
+            !Array.isArray(importedPrimary)) {
+          throw new Error("形式が違います");
+        }
+        if (!importedState.overrides || !Array.isArray(importedState.deletedIds) || !Array.isArray(importedState.customRows)) {
+          throw new Error("詳細イベントのデータが不正です");
+        }
+        profile = {
+          title: typeof importedProfile.title === "string" && importedProfile.title ? importedProfile.title : "ライフラインチャート",
+          birthYear: typeof importedProfile.birthYear === "string" ? importedProfile.birthYear : "",
+          rangeStart: start,
+          rangeEnd: end
+        };
+        AGE_START = start;
+        AGE_MAX = end;
+        // インポートしたイベントはすべて「追加行」として取り込み、
+        // 組み込みサンプル（BUILTIN_PRIMARY_DATA）は重複しないようすべて削除扱いにする。
+        var importedCustomRows = importedPrimary.filter(function (d) {
+          return d && Number.isFinite(Number(d.age)) && typeof d.event === "string";
+        }).map(function (d, index) {
+          var age = Math.max(AGE_START, Math.min(AGE_MAX, Number(d.age)));
+          return {
+            id: typeof d.id === "string" ? d.id : "p" + index,
+            age: age,
+            period: typeof d.period === "string" ? d.period : yearForAge(age),
+            event: d.event,
+            category: d.category === "work" ? "work" : "private",
+            polarity: d.polarity === "negative" || d.polarity === "neutral" ? d.polarity : "positive",
+            periodAuto: d.periodAuto === true
+          };
+        });
+        var allBuiltinPrimaryIds = BUILTIN_PRIMARY_DATA.map(function (b) { return b.id; });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(importedState));
+        localStorage.setItem(PRIMARY_STORAGE_KEY, JSON.stringify({ overrides: {}, deletedIds: allBuiltinPrimaryIds, customRows: importedCustomRows }));
+        PRIMARY_DATA = rebuildPrimaryData();
+        saveProfile();
+        rebuildData();
+        updateProfileDisplay();
+        renderChart();
+        buildPrimaryTable();
+        buildTable();
+        setTransferStatus("インポートしました");
+      } catch (e) {
+        setTransferStatus("インポートに失敗しました");
+      }
+    };
+    reader.onerror = function () { setTransferStatus("ファイルを読み込めませんでした"); };
+    reader.readAsText(file, "utf-8");
+  }
+
+  document.getElementById("exportJsonBtn").addEventListener("click", exportJson);
+  document.getElementById("importJsonBtn").addEventListener("click", function () {
+    document.getElementById("importJsonFile").click();
+  });
+  document.getElementById("importJsonFile").addEventListener("change", function (event) {
+    importJson(event.target.files[0]);
+    event.target.value = "";
+  });
+
+  function saveProfile() {
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    updateProfileDisplay();
+    document.getElementById("newAge").min = String(AGE_START);
+    document.getElementById("newAge").max = String(AGE_MAX);
+    document.getElementById("primaryNewAge").min = String(AGE_START);
+    document.getElementById("primaryNewAge").max = String(AGE_MAX);
+  }
+
+  document.getElementById("applyProfileBtn").addEventListener("click", function () {
+    var start = parseFloat(rangeStartEl.value);
+    var end = parseFloat(rangeEndEl.value);
+    if (isNaN(start) || isNaN(end) || start < 0 || end <= start) {
+      rangeEndEl.focus();
+      return;
+    }
+    AGE_START = start;
+    AGE_MAX = end;
+    profile = {
+      title: chartTitleInputEl.value.trim() || "ライフラインチャート",
+      birthYear: birthYearEl.value.trim(),
+      rangeStart: start,
+      rangeEnd: end
+    };
+    refreshAutoPrimaryPeriods();
+    persistPrimary();
+    refreshAutoDataPeriods();
+    persist();
+    saveProfile();
+    renderChart();
+    buildPrimaryTable();
+    buildTable();
+  });
+
+  updateProfileDisplay();
+
+  // ── 振り返り文章（下部カード）───────────────────────────────
+  var REFLECTION_STORAGE_KEY = "lifelineChart_generic_reflection_v1";
+  function loadReflection() {
+    var defaults = {
+      quote: "ここに、人生全体を振り返って見えてきたテーマや価値観を記録できます。",
+      body: "イベントを登録し、幸福度の推移と出来事の関係を振り返ってみてください。\n一次情報イベントと詳細イベントは、JSONで保存・移行できます。"
+    };
+    try {
+      var raw = localStorage.getItem(REFLECTION_STORAGE_KEY);
+      if (!raw) return defaults;
+      var r = JSON.parse(raw);
+      return {
+        quote: r && typeof r.quote === "string" ? r.quote : defaults.quote,
+        body: r && typeof r.body === "string" ? r.body : defaults.body
+      };
+    } catch (e) {
+      return defaults;
+    }
+  }
+  var reflection = loadReflection();
+
+  function renderQuoteCard() {
+    document.getElementById("quoteHeadline").textContent = reflection.quote;
+    var bodyEl = document.getElementById("quoteBodyDisplay");
+    bodyEl.innerHTML = "";
+    reflection.body.split("\n").forEach(function (line) {
+      if (!line.trim()) return;
+      var p = document.createElement("p");
+      p.textContent = line;
+      bodyEl.appendChild(p);
+    });
+  }
+  renderQuoteCard();
+
+  document.getElementById("editQuoteBtn").addEventListener("click", function () {
+    document.getElementById("editQuoteHeadline").value = reflection.quote;
+    document.getElementById("editQuoteBody").value = reflection.body;
+    document.getElementById("quoteDisplay").hidden = true;
+    document.getElementById("quoteEditForm").hidden = false;
+    document.getElementById("editQuoteHeadline").focus();
+  });
+  document.getElementById("cancelQuoteBtn").addEventListener("click", function () {
+    document.getElementById("quoteEditForm").hidden = true;
+    document.getElementById("quoteDisplay").hidden = false;
+  });
+  document.getElementById("saveQuoteBtn").addEventListener("click", function () {
+    reflection = {
+      quote: document.getElementById("editQuoteHeadline").value.trim() || reflection.quote,
+      body: document.getElementById("editQuoteBody").value
+    };
+    try { localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(reflection)); } catch (e) {}
+    renderQuoteCard();
+    document.getElementById("quoteEditForm").hidden = true;
+    document.getElementById("quoteDisplay").hidden = false;
+  });
+
+  // ── localStorage 読み書き ──────────────────────────────────
+  // 保存形式: { overrides: {id: {age,period,event,value,type}}, deletedIds: [id,...], customRows: [{...}] }
+  // DATA は毎回 BUILTIN_DATA + この差分 から組み立て直す（単一の情報源は localStorage 側）。
+  function loadState() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { overrides: {}, deletedIds: [], customRows: [] };
+      var s = JSON.parse(raw);
+      return {
+        overrides: (s && s.overrides) || {},
+        deletedIds: (s && s.deletedIds) || [],
+        customRows: (s && s.customRows) || []
+      };
+    } catch (e) {
+      return { overrides: {}, deletedIds: [], customRows: [] };
+    }
+  }
+
+  var saveStatusEl = document.getElementById("saveStatus");
+  var saveStatusTimer = null;
+  function persist() {
+    try {
+      var overrides = {};
+      var deletedIds = [];
+      var customRows = [];
+      var liveIds = {};
+      DATA.forEach(function (d) { liveIds[d.id] = true; });
+      BUILTIN_DATA.forEach(function (b) {
+        if (!liveIds[b.id]) { deletedIds.push(b.id); }
+      });
+      DATA.forEach(function (d) {
+        if (d.custom) {
+          customRows.push({
+            id: d.id, age: d.age, period: d.period, event: d.event,
+            value: d.value, type: d.type, periodAuto: d.periodAuto === true,
+            detail: {
+              summary: d.detail.summary || "", why: d.detail.why || "",
+              overcome: d.detail.overcome || "", values: d.detail.values || "",
+              note: d.detail.note || "", related: d.detail.related || ""
+            }
+          });
+        } else {
+          overrides[d.id] = {
+            age: d.age, period: d.period, event: d.event, value: d.value, type: d.type,
+            periodAuto: d.periodAuto === true,
+            detail: {
+              summary: d.detail.summary || "", why: d.detail.why || "",
+              overcome: d.detail.overcome || "", values: d.detail.values || "",
+              note: d.detail.note || "", related: d.detail.related || ""
+            }
+          };
+        }
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ overrides: overrides, deletedIds: deletedIds, customRows: customRows }));
+      saveStatusEl.textContent = "保存しました";
+      saveStatusEl.style.opacity = "1";
+      clearTimeout(saveStatusTimer);
+      saveStatusTimer = setTimeout(function () { saveStatusEl.style.opacity = "0"; }, 1500);
+    } catch (e) {
+      saveStatusEl.textContent = "保存に失敗しました";
+      saveStatusEl.style.opacity = "1";
+    }
+  }
+
+  // BUILTIN_DATA + localStorage の差分 から DATA を年齢順に組み立て直す
+  function rebuildData(state) {
+    var s = state || loadState();
+    var deletedSet = {};
+    s.deletedIds.forEach(function (id) { deletedSet[id] = true; });
+
+    var next = [];
+    BUILTIN_DATA.forEach(function (b) {
+      if (deletedSet[b.id]) return;
+      var o = s.overrides[b.id];
+      var age = o && typeof o.age === "number" ? o.age : b.age;
+      var periodAuto = o && typeof o.periodAuto === "boolean" ? o.periodAuto : b.periodAuto;
+      var period = periodAuto ? yearForAge(age) : (o && typeof o.period === "string" ? o.period : b.period);
+      next.push({
+        id: b.id, custom: false,
+        age: age,
+        period: period,
+        event: o && typeof o.event === "string" ? o.event : b.event,
+        value: o && typeof o.value === "number" ? o.value : b.value,
+        type: o && typeof o.type === "string" ? o.type : b.type,
+        periodAuto: periodAuto,
+        detail: o && o.detail ? {
+          summary: o.detail.summary || "", why: o.detail.why || "",
+          overcome: o.detail.overcome || "", values: o.detail.values || "",
+          note: o.detail.note || "", related: o.detail.related || ""
+        } : b.detail
+      });
+    });
+    s.customRows.forEach(function (c) {
+      var age = typeof c.age === "number" ? c.age : 0;
+      var periodAuto = c.periodAuto === true;
+      var period = periodAuto ? yearForAge(age) : (c.period || "");
+      next.push({
+        id: c.id, custom: true,
+        age: age,
+        period: period,
+        event: c.event || "",
+        value: typeof c.value === "number" ? c.value : 0,
+        type: c.type || "出来事",
+        periodAuto: periodAuto,
+        detail: {
+          summary: (c.detail && c.detail.summary) || "",
+          why: (c.detail && c.detail.why) || "",
+          overcome: (c.detail && c.detail.overcome) || "",
+          values: (c.detail && c.detail.values) || "",
+          note: (c.detail && c.detail.note) || "",
+          related: (c.detail && c.detail.related) || ""
+        }
+      });
+    });
+    next.sort(function (a, b) { return a.age - b.age; });
+    DATA = next;
+  }
+
+  rebuildData();
+
+  // ── チャート描画（データが変わるたびに呼び直す）───────────────
+  function renderChart() {
+    svg.innerHTML = "";
+
+    // 背景バンド（BAND が設定されている場合のみ表示。汎用テンプレート版は既定で未設定）
+    if (BAND) {
+      var bandFrom = Math.max(AGE_START, BAND.from);
+      var bandTo = Math.min(AGE_MAX, BAND.to);
+      var bandRect = el("rect", {
+        x: scaleX(bandFrom), y: MARGIN.top,
+        width: Math.max(0, scaleX(bandTo) - scaleX(bandFrom)), height: innerH,
+        fill: "var(--band-wash)"
+      });
+      svg.appendChild(bandRect);
+      if (bandTo > bandFrom) {
+        var bandLabel = el("text", {
+          x: (scaleX(bandFrom) + scaleX(bandTo)) / 2, y: MARGIN.top + 14,
+          "text-anchor": "middle", fill: "var(--text-muted)", "font-size": "11"
+        });
+        bandLabel.textContent = BAND.label;
+        svg.appendChild(bandLabel);
+      }
+    }
+
+    // 生年が設定されている場合は、グラフ上部に西暦を表示する。
+    var yearTitle = el("text", {
+      x: MARGIN.left - 34, y: 16, fill: "var(--text-muted)", "font-size": "10"
+    });
+    yearTitle.textContent = "西暦";
+    svg.appendChild(yearTitle);
+    if (birthYearNumber() !== null) {
+      for (var yearAge = AGE_START; yearAge <= AGE_MAX; yearAge += 5) {
+        var yearLabel = el("text", {
+          x: scaleX(yearAge), y: 16, "text-anchor": "middle",
+          fill: "var(--text-muted)", "font-size": "10"
+        });
+        yearLabel.textContent = Math.round(birthYearNumber() + yearAge) + "年";
+        svg.appendChild(yearLabel);
+      }
+    }
+
+    // Y軸グリッド・ラベル
+    [-20, -15, -10, -5, 0, 5, 10, 15, 20].forEach(function (v) {
+      var y = scaleY(v);
+      svg.appendChild(el("line", {
+        x1: MARGIN.left, x2: W - MARGIN.right, y1: y, y2: y,
+        stroke: v === 0 ? "var(--baseline)" : "var(--gridline)",
+        "stroke-width": v === 0 ? 1.5 : 1
+      }));
+      var t = el("text", { x: MARGIN.left - 8, y: y + 4, "text-anchor": "end", fill: "var(--text-muted)", "font-size": "11" });
+      t.textContent = v;
+      svg.appendChild(t);
+    });
+
+    // 一次情報イベントを縦点線で表示する。同年のイベントは線とラベルを左右にずらす。
+    var markerGroups = {};
+    PRIMARY_DATA.forEach(function (d) {
+      if (d.age < AGE_START || d.age > AGE_MAX) return;
+      var key = String(Math.round(d.age * 10) / 10);
+      if (!markerGroups[key]) markerGroups[key] = [];
+      markerGroups[key].push(d);
+    });
+    Object.keys(markerGroups).forEach(function (key) {
+      var group = markerGroups[key];
+      group.forEach(function (d, groupIndex) {
+        var markerColor = d.polarity === "negative" ? "var(--neg)"
+          : d.polarity === "positive" ? "var(--pos)" : "var(--baseline)";
+        var centerX = scaleX(d.age);
+        var markerOffset = (groupIndex - (group.length - 1) / 2) * 4;
+        var markerX = centerX + markerOffset;
+        svg.appendChild(el("line", {
+          x1: markerX, x2: markerX, y1: MARGIN.top, y2: H - MARGIN.bottom,
+          stroke: markerColor, "stroke-width": 1.5, "stroke-dasharray": "2,5", opacity: 0.8
+        }));
+        var labelY = d.polarity === "negative"
+          ? zeroY + 12 + (groupIndex % 2) * 14
+          : MARGIN.top + 30 + (groupIndex % 2) * 14;
+        var markerLabel = el("text", {
+          x: markerX + 4, y: labelY,
+          fill: markerColor, "font-size": "10", "writing-mode": "tb"
+        });
+        markerLabel.textContent = d.event + "（" + (d.category === "work" ? "仕事" : "私") + "）";
+        svg.appendChild(markerLabel);
+      });
+    });
+
+    // X軸ラベル
+    for (var a = AGE_START; a <= AGE_MAX; a += 5) {
+      var x0 = scaleX(a);
+      var t2 = el("text", { x: x0, y: H - MARGIN.bottom + 20, "text-anchor": "middle", fill: "var(--text-muted)", "font-size": "11" });
+      t2.textContent = a + "歳";
+      svg.appendChild(t2);
+    }
+    var xAxisTitle = el("text", { x: W - MARGIN.right, y: H - 8, "text-anchor": "end", fill: "var(--text-muted)", "font-size": "11" });
+    xAxisTitle.textContent = "年齢";
+    svg.appendChild(xAxisTitle);
+    var yAxisTitle = el("text", { x: W - MARGIN.right, y: 16, "text-anchor": "end", fill: "var(--text-muted)", "font-size": "11" });
+    yAxisTitle.textContent = "幸福度（推定）";
+    svg.appendChild(yAxisTitle);
+
+    // 面（極性で青／赤に塗り分け）
+    var pts = DATA.map(function (d) { return { age: d.age, value: d.value }; });
+    var areaLayer = el("g", {});
+    svg.appendChild(areaLayer);
+
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p1 = pts[i], p2 = pts[i + 1];
+      var segs = [];
+      if ((p1.value >= 0 && p2.value >= 0) || (p1.value <= 0 && p2.value <= 0)) {
+        var sign = (p1.value + p2.value) >= 0 ? "pos" : "neg";
+        segs.push({ sign: sign, a: p1, b: p2 });
+      } else {
+        var t3 = Math.abs(p1.value) / (Math.abs(p1.value) + Math.abs(p2.value));
+        var crossAge = p1.age + t3 * (p2.age - p1.age);
+        var cross = { age: crossAge, value: 0 };
+        segs.push({ sign: p1.value > 0 ? "pos" : "neg", a: p1, b: cross });
+        segs.push({ sign: p2.value > 0 ? "pos" : "neg", a: cross, b: p2 });
+      }
+      segs.forEach(function (s) {
+        var x1 = scaleX(s.a.age), x2 = scaleX(s.b.age);
+        var y1 = scaleY(s.a.value), y2 = scaleY(s.b.value);
+        var d = "M " + x1 + " " + y1 + " L " + x2 + " " + y2 + " L " + x2 + " " + zeroY + " L " + x1 + " " + zeroY + " Z";
+        areaLayer.appendChild(el("path", {
+          d: d, fill: s.sign === "pos" ? "var(--pos)" : "var(--neg)", "fill-opacity": "0.12", stroke: "none"
+        }));
+      });
+    }
+
+    // 折れ線（Catmull-Romスプラインで滑らかな曲線に）
+    var linePoints = pts.map(function (p) { return { x: scaleX(p.age), y: scaleY(p.value) }; });
+    var linePath = buildSmoothPath(linePoints);
+    svg.appendChild(el("path", { d: linePath, fill: "none", stroke: "var(--line-ink)", "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+    // 点＋ヒットターゲット
+    var crosshair = el("line", { x1: 0, x2: 0, y1: MARGIN.top, y2: H - MARGIN.bottom, stroke: "var(--baseline)", "stroke-width": 1, "stroke-dasharray": "3,3", opacity: 0 });
+    svg.appendChild(crosshair);
+
+    DATA.forEach(function (d, idx) {
+      var x = scaleX(d.age), y = scaleY(d.value);
+      var isNow = d.type === "現在";
+      var r = isNow ? 7 : 5;
+      var color = d.value >= 0 ? "var(--pos)" : "var(--neg)";
+
+      var g = el("g", { class: "point-hit", tabindex: "0", role: "button", "aria-label": d.period + " " + d.event });
+      g.appendChild(el("circle", { cx: x, cy: y, r: 14, fill: "transparent" })); // 拡大ヒット領域
+      g.appendChild(el("circle", { class: "ring", cx: x, cy: y, r: r, fill: color, stroke: "var(--surface-1)", "stroke-width": 2 }));
+      svg.appendChild(g);
+
+      function showTooltip() {
+        crosshair.setAttribute("x1", x);
+        crosshair.setAttribute("x2", x);
+        crosshair.setAttribute("opacity", "1");
+
+        var rect = svg.getBoundingClientRect();
+        var cardRect = chartCard.getBoundingClientRect();
+        var scale = rect.width / W;
+        var px = rect.left - cardRect.left + x * scale;
+        var py = rect.top - cardRect.top + y * scale;
+
+        tooltip.innerHTML = "";
+        var pEl = document.createElement("div"); pEl.className = "t-period"; pEl.textContent = d.period;
+        var eEl = document.createElement("div"); eEl.className = "t-event"; eEl.textContent = d.event;
+        var bEl = document.createElement("span"); bEl.className = "t-badge";
+        bEl.style.background = color;
+        bEl.textContent = (d.value > 0 ? "+" : "") + d.value + "（" + d.type + "）";
+        var hEl = document.createElement("div"); hEl.className = "t-hint"; hEl.textContent = "クリック／Enterで詳細を表示";
+
+        tooltip.appendChild(pEl);
+        tooltip.appendChild(eEl);
+        tooltip.appendChild(bEl);
+        tooltip.appendChild(hEl);
+
+        tooltip.style.left = (px + 12) + "px";
+        tooltip.style.top = (py - 10) + "px";
+        tooltip.style.opacity = "1";
+      }
+      function hideTooltip() {
+        tooltip.style.opacity = "0";
+        crosshair.setAttribute("opacity", "0");
+      }
+      function selectPoint() { selectedId = d.id; renderDetail(d); }
+
+      g.addEventListener("pointerenter", showTooltip);
+      g.addEventListener("pointerleave", hideTooltip);
+      g.addEventListener("focus", showTooltip);
+      g.addEventListener("blur", hideTooltip);
+      g.addEventListener("click", selectPoint);
+      g.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); selectPoint(); }
+      });
+    });
+  }
+
+  // SVGをPNGとしてダウンロードする。SVG内のCSS変数は画像化前に実値へ置換する。
+  function saveChartAsPng() {
+    try {
+      var serializer = new XMLSerializer();
+      var svgText = serializer.serializeToString(svg);
+      var rootStyle = getComputedStyle(document.documentElement);
+      svgText = svgText.replace(/var\((--[a-z0-9-]+)\)/gi, function (all, name) {
+        return rootStyle.getPropertyValue(name).trim() || all;
+      });
+      var blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var image = new Image();
+      image.onload = function () {
+        var canvas = document.createElement("canvas");
+        var scale = 2;
+        canvas.width = W * scale;
+        canvas.height = H * scale;
+        var context = canvas.getContext("2d");
+        context.fillStyle = rootStyle.getPropertyValue("--surface-1").trim() || "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        var link = document.createElement("a");
+        link.download = "ライフラインチャート.png";
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      };
+      image.onerror = function () {
+        URL.revokeObjectURL(url);
+      };
+      image.src = url;
+    } catch (e) {
+      alert("PNG保存に失敗しました。");
+    }
+  }
+
+  document.getElementById("savePngBtn").addEventListener("click", saveChartAsPng);
+
+  // ── 詳細パネル ─────────────────────────────────────────────
+  function setSection(idBase, text) {
+    var wrap = document.getElementById(idBase + "-wrap");
+    var body = document.getElementById(idBase);
+    if (text) { wrap.style.display = ""; body.textContent = text; }
+    else { wrap.style.display = "none"; body.textContent = ""; }
+  }
+
+  function renderDetail(d) {
+    document.getElementById("d-title").textContent = d.event;
+    document.getElementById("d-period").textContent = d.period;
+    var typeEl = document.getElementById("d-type");
+    typeEl.style.display = "";
+    typeEl.textContent = d.type + "（推定幸福度 " + (d.value > 0 ? "+" : "") + d.value + "）";
+    document.getElementById("d-placeholder").style.display = "none";
+    document.getElementById("d-body").style.display = "";
+    document.getElementById("d-summary").textContent = d.detail.summary || "（詳細は未入力です）";
+    setSection("d-why", d.detail.why);
+    setSection("d-overcome", d.detail.overcome);
+    setSection("d-values", d.detail.values);
+    setSection("d-note", d.detail.note);
+    setSection("d-related", d.detail.related);
+    document.getElementById("editDetailBtn").style.display = "inline-block";
+    document.getElementById("detailEditForm").hidden = true;
+  }
+
+  function clearDetailPanel() {
+    document.getElementById("d-title").textContent = "詳細";
+    document.getElementById("d-period").textContent = "";
+    document.getElementById("d-type").style.display = "none";
+    document.getElementById("editDetailBtn").style.display = "none";
+    document.getElementById("detailEditForm").hidden = true;
+    document.getElementById("d-placeholder").style.display = "";
+    document.getElementById("d-body").style.display = "none";
+  }
+
+  function setDetailEditFields(d) {
+    var detail = d.detail || {};
+    document.getElementById("editSummary").value = detail.summary || "";
+    document.getElementById("editWhy").value = detail.why || "";
+    document.getElementById("editOvercome").value = detail.overcome || "";
+    document.getElementById("editValues").value = detail.values || "";
+    document.getElementById("editNote").value = detail.note || "";
+    document.getElementById("editRelated").value = detail.related || "";
+  }
+
+  document.getElementById("editDetailBtn").addEventListener("click", function () {
+    var d = findById(selectedId);
+    if (!d) return;
+    setDetailEditFields(d);
+    document.getElementById("detailEditForm").hidden = false;
+    document.getElementById("editSummary").focus();
+  });
+
+  document.getElementById("cancelDetailBtn").addEventListener("click", function () {
+    document.getElementById("detailEditForm").hidden = true;
+  });
+
+  document.getElementById("saveDetailBtn").addEventListener("click", function () {
+    var d = findById(selectedId);
+    if (!d) return;
+    d.detail = {
+      summary: document.getElementById("editSummary").value,
+      why: document.getElementById("editWhy").value,
+      overcome: document.getElementById("editOvercome").value,
+      values: document.getElementById("editValues").value,
+      note: document.getElementById("editNote").value,
+      related: document.getElementById("editRelated").value
+    };
+    persist();
+    rebuildData();
+    renderChart();
+    buildTable();
+    renderDetail(findById(selectedId));
+  });
+
+  // ── 一次情報イベント（事実記録）────────────────────────────
+  var primaryTbody = document.getElementById("primaryDataTableBody");
+  var primarySaveStatusEl = document.getElementById("primarySaveStatus");
+  var primarySaveTimer = null;
+
+  function persistPrimary() {
+    try {
+      var overrides = {};
+      var deletedIds = [];
+      var customRows = [];
+      var liveIds = {};
+      PRIMARY_DATA.forEach(function (d) { liveIds[d.id] = true; });
+      BUILTIN_PRIMARY_DATA.forEach(function (b) {
+        if (!liveIds[b.id]) { deletedIds.push(b.id); }
+      });
+      PRIMARY_DATA.forEach(function (d) {
+        if (d.custom) {
+          customRows.push({
+            id: d.id, age: d.age, period: d.period, event: d.event,
+            category: d.category, polarity: d.polarity, periodAuto: d.periodAuto
+          });
+        } else {
+          overrides[d.id] = {
+            age: d.age, period: d.period, event: d.event,
+            category: d.category, polarity: d.polarity, periodAuto: d.periodAuto
+          };
+        }
+      });
+      localStorage.setItem(PRIMARY_STORAGE_KEY, JSON.stringify({ overrides: overrides, deletedIds: deletedIds, customRows: customRows }));
+      primarySaveStatusEl.textContent = "保存しました";
+      primarySaveStatusEl.style.opacity = "1";
+      clearTimeout(primarySaveTimer);
+      primarySaveTimer = setTimeout(function () { primarySaveStatusEl.style.opacity = "0"; }, 1500);
+    } catch (e) {
+      primarySaveStatusEl.textContent = "保存に失敗しました";
+      primarySaveStatusEl.style.opacity = "1";
+    }
+  }
+
+  function primaryValueLabel(value) {
+    return value === "positive" ? "プラス" : value === "negative" ? "マイナス" : "中立";
+  }
+
+  function primaryCategoryLabel(value) {
+    return value === "work" ? "仕事" : "プライベート";
+  }
+
+  function buildPrimaryTable() {
+    primaryTbody.innerHTML = "";
+    PRIMARY_DATA.sort(function (a, b) { return a.age - b.age; });
+    PRIMARY_DATA.forEach(function (d) {
+      var tr = document.createElement("tr");
+      var ageCell = document.createElement("td"); ageCell.className = "col-age";
+      var ageInput = document.createElement("input");
+      ageInput.type = "number"; ageInput.min = String(AGE_START); ageInput.max = String(AGE_MAX);
+      ageInput.step = "0.1"; ageInput.value = d.age;
+      ageInput.addEventListener("change", function () {
+        var n = parseFloat(ageInput.value);
+        if (!isNaN(n)) {
+          d.age = Math.max(AGE_START, Math.min(AGE_MAX, n));
+          persistPrimary();
+          PRIMARY_DATA = rebuildPrimaryData();
+          renderChart(); buildPrimaryTable();
+        }
+      });
+      ageCell.appendChild(ageInput);
+
+      var periodCell = document.createElement("td");
+      var periodInput = document.createElement("input"); periodInput.type = "text"; periodInput.value = d.period;
+      periodInput.addEventListener("change", function () {
+        // 時期を手で書き換えたら、以後は年齢からの自動計算を止める。
+        d.period = periodInput.value;
+        d.periodAuto = false;
+        persistPrimary();
+        PRIMARY_DATA = rebuildPrimaryData();
+        buildPrimaryTable();
+      });
+      periodCell.appendChild(periodInput);
+
+      var eventCell = document.createElement("td");
+      var eventInput = document.createElement("input"); eventInput.type = "text"; eventInput.value = d.event;
+      eventInput.addEventListener("change", function () { d.event = eventInput.value; persistPrimary(); renderChart(); });
+      eventCell.appendChild(eventInput);
+
+      var categoryCell = document.createElement("td");
+      var categorySelect = document.createElement("select");
+      categorySelect.innerHTML = "<option value=\"private\">プライベート</option><option value=\"work\">仕事</option>";
+      categorySelect.value = d.category;
+      categorySelect.addEventListener("change", function () { d.category = categorySelect.value; persistPrimary(); });
+      categoryCell.appendChild(categorySelect);
+
+      var polarityCell = document.createElement("td"); polarityCell.className = "col-value";
+      var polaritySelect = document.createElement("select");
+      polaritySelect.innerHTML = "<option value=\"positive\">プラス</option><option value=\"negative\">マイナス</option><option value=\"neutral\">中立</option>";
+      polaritySelect.value = d.polarity;
+      polaritySelect.addEventListener("change", function () { d.polarity = polaritySelect.value; persistPrimary(); renderChart(); });
+      polarityCell.appendChild(polaritySelect);
+
+      var actionCell = document.createElement("td"); actionCell.className = "col-action";
+      var deleteButton = document.createElement("button"); deleteButton.type = "button"; deleteButton.className = "row-delete-btn";
+      makeArmedButton(deleteButton, "削除", "本当に削除？", function () {
+        PRIMARY_DATA = PRIMARY_DATA.filter(function (x) { return x.id !== d.id; });
+        persistPrimary(); renderChart(); buildPrimaryTable();
+      });
+      actionCell.appendChild(deleteButton);
+
+      tr.appendChild(ageCell); tr.appendChild(periodCell); tr.appendChild(eventCell);
+      tr.appendChild(categoryCell); tr.appendChild(polarityCell); tr.appendChild(actionCell);
+      primaryTbody.appendChild(tr);
+    });
+  }
+
+  var primaryAddForm = document.getElementById("primaryAddForm");
+  var primaryNewAgeEl = document.getElementById("primaryNewAge");
+  var primaryNewPeriodEl = document.getElementById("primaryNewPeriod");
+  var primaryNewEventEl = document.getElementById("primaryNewEvent");
+  var primaryNewCategoryEl = document.getElementById("primaryNewCategory");
+  var primaryNewPolarityEl = document.getElementById("primaryNewPolarity");
+  wireAutoPeriod(primaryNewAgeEl, primaryNewPeriodEl);
+
+  document.getElementById("addPrimaryBtn").addEventListener("click", function () {
+    primaryAddForm.hidden = !primaryAddForm.hidden;
+    if (!primaryAddForm.hidden) {
+      primaryNewAgeEl.focus();
+      primaryNewAgeEl.select();
+      if (primaryNewPeriodEl.dataset.auto === "1") {
+        var a = parseFloat(primaryNewAgeEl.value);
+        if (!isNaN(a)) primaryNewPeriodEl.value = yearForAge(a);
+      }
+    }
+  });
+
+  document.getElementById("confirmPrimaryBtn").addEventListener("click", function () {
+    var age = parseFloat(primaryNewAgeEl.value);
+    if (isNaN(age)) { primaryNewAgeEl.focus(); return; }
+    var isAutoPeriod = primaryNewPeriodEl.dataset.auto === "1";
+    PRIMARY_DATA.push({
+      id: newId(), custom: true, age: Math.max(AGE_START, Math.min(AGE_MAX, age)),
+      period: primaryNewPeriodEl.value.trim() || yearForAge(age),
+      event: primaryNewEventEl.value.trim() || "新しいイベント",
+      category: primaryNewCategoryEl.value,
+      polarity: primaryNewPolarityEl.value,
+      periodAuto: isAutoPeriod
+    });
+    persistPrimary();
+    PRIMARY_DATA = rebuildPrimaryData();
+    renderChart(); buildPrimaryTable();
+    primaryAddForm.hidden = true;
+    resetAutoPeriod(primaryNewPeriodEl);
+    primaryNewEventEl.value = "";
+  });
+
+  // ── テーブル表示（編集・追加・削除）─────────────────────────
+  var tbody = document.getElementById("dataTableBody");
+
+  function findById(id) {
+    for (var i = 0; i < DATA.length; i++) { if (DATA[i].id === id) return DATA[i]; }
+    return null;
+  }
+
+  function afterDataChange(idToReselect) {
+    persist();
+    rebuildData();
+    renderChart();
+    buildTable();
+    if (idToReselect) {
+      var d = findById(idToReselect);
+      if (d) { renderDetail(d); } else { selectedId = null; clearDetailPanel(); }
+    }
+  }
+
+  function handleFieldChange(id, field, rawValue) {
+    var d = findById(id);
+    if (!d) return;
+    if (field === "value") {
+      var n = parseFloat(rawValue);
+      if (isNaN(n)) { buildTable(); return; }
+      d.value = Math.max(-20, Math.min(20, Math.round(n)));
+    } else if (field === "age") {
+      var a = parseFloat(rawValue);
+      if (isNaN(a)) { buildTable(); return; }
+      d.age = Math.max(AGE_START, Math.min(AGE_MAX, a));
+    } else if (field === "period") {
+      // 時期を手で書き換えたら、以後は年齢からの自動計算を止めて手入力の内容を保つ。
+      d.period = rawValue;
+      d.periodAuto = false;
+    } else {
+      d[field] = rawValue;
+    }
+    afterDataChange(selectedId === id ? id : null);
+  }
+
+  // confirm() はブラウザのモーダルダイアログでスクリプトを止めてしまうため使わず、
+  // 「もう一度押すと確定」の二段階クリックで誤操作を防ぐ汎用ボタンを作る。
+  function makeArmedButton(btn, defaultLabel, confirmLabel, onConfirm) {
+    var armed = false;
+    var timer = null;
+    btn.textContent = defaultLabel;
+    btn.addEventListener("click", function () {
+      if (!armed) {
+        armed = true;
+        btn.textContent = confirmLabel;
+        timer = setTimeout(function () { armed = false; btn.textContent = defaultLabel; }, 3000);
+        return;
+      }
+      clearTimeout(timer);
+      armed = false;
+      btn.textContent = defaultLabel;
+      onConfirm();
+    });
+  }
+
+  function buildTable() {
+    tbody.innerHTML = "";
+    DATA.forEach(function (d) {
+      var id = d.id;
+      var tr = document.createElement("tr");
+
+      var c0 = document.createElement("td"); c0.className = "col-age";
+      var i0 = document.createElement("input");
+      i0.type = "number"; i0.min = String(AGE_START); i0.max = String(AGE_MAX); i0.step = "0.1"; i0.value = d.age;
+      i0.addEventListener("change", function () { handleFieldChange(id, "age", i0.value); });
+      c0.appendChild(i0);
+
+      var c1 = document.createElement("td");
+      var i1 = document.createElement("input");
+      i1.type = "text"; i1.value = d.period;
+      i1.addEventListener("change", function () { handleFieldChange(id, "period", i1.value); });
+      c1.appendChild(i1);
+
+      var c2 = document.createElement("td");
+      var i2 = document.createElement("input");
+      i2.type = "text"; i2.value = d.event;
+      i2.addEventListener("change", function () { handleFieldChange(id, "event", i2.value); });
+      c2.appendChild(i2);
+
+      var c3 = document.createElement("td"); c3.className = "col-value";
+      var i3 = document.createElement("input");
+      i3.type = "number"; i3.min = "-20"; i3.max = "20"; i3.step = "1"; i3.value = d.value;
+      i3.addEventListener("change", function () { handleFieldChange(id, "value", i3.value); });
+      c3.appendChild(i3);
+
+      var c4 = document.createElement("td"); c4.className = "col-type";
+      var i4 = document.createElement("input");
+      i4.type = "text"; i4.value = d.type;
+      i4.addEventListener("change", function () { handleFieldChange(id, "type", i4.value); });
+      c4.appendChild(i4);
+
+      var c5 = document.createElement("td"); c5.className = "col-action";
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "row-delete-btn";
+      makeArmedButton(delBtn, "削除", "本当に削除？", function () {
+        DATA = DATA.filter(function (x) { return x.id !== id; });
+        if (selectedId === id) { selectedId = null; }
+        afterDataChange(null);
+      });
+      c5.appendChild(delBtn);
+
+      tr.appendChild(c0); tr.appendChild(c1); tr.appendChild(c2); tr.appendChild(c3); tr.appendChild(c4); tr.appendChild(c5);
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById("toggleTableBtn").addEventListener("click", function () {
+    var w = document.getElementById("tableWrap");
+    w.style.display = (w.style.display === "none" || !w.style.display) ? "block" : "none";
+  });
+
+  var addRowForm = document.getElementById("addRowForm");
+  var newAgeEl = document.getElementById("newAge");
+  var newPeriodEl = document.getElementById("newPeriod");
+  var newEventEl = document.getElementById("newEvent");
+  wireAutoPeriod(newAgeEl, newPeriodEl);
+
+  // 追加フォームを開き、任意の年齢・時期・年次を指定できるようにする。
+  document.getElementById("addRowBtn").addEventListener("click", function () {
+    var w = document.getElementById("tableWrap");
+    w.style.display = "block";
+    addRowForm.hidden = !addRowForm.hidden;
+    if (!addRowForm.hidden) {
+      newAgeEl.focus();
+      newAgeEl.select();
+      if (newPeriodEl.dataset.auto === "1") {
+        var a0 = parseFloat(newAgeEl.value);
+        if (!isNaN(a0)) newPeriodEl.value = yearForAge(a0);
+      }
+    }
+  });
+
+  document.getElementById("confirmAddRowBtn").addEventListener("click", function () {
+    var age = parseFloat(newAgeEl.value);
+    if (isNaN(age)) {
+      newAgeEl.focus();
+      return;
+    }
+    age = Math.max(AGE_START, Math.min(AGE_MAX, age));
+    var isAutoPeriod = newPeriodEl.dataset.auto === "1";
+    var newRow = {
+      id: newId(), custom: true,
+      age: age,
+      period: newPeriodEl.value.trim() || yearForAge(age),
+      event: newEventEl.value.trim() || "新しい出来事",
+      value: 0, type: "出来事",
+      periodAuto: isAutoPeriod,
+      detail: { summary: "" }
+    };
+    DATA.push(newRow);
+    DATA.sort(function (a, b) { return a.age - b.age; });
+    persist();
+    rebuildData();
+    renderChart();
+    buildTable();
+    addRowForm.hidden = true;
+    resetAutoPeriod(newPeriodEl);
+    newEventEl.value = "";
+    // 追加した行の「出来事」欄にフォーカスして、そのまま編集できるようにする。
+    var rows = tbody.querySelectorAll("tr");
+    DATA.forEach(function (d, i) {
+      if (d.id === newRow.id) {
+        var input = rows[i] && rows[i].children[2] && rows[i].children[2].querySelector("input");
+        if (input) { input.focus(); input.select(); }
+      }
+    });
+  });
+
+  makeArmedButton(document.getElementById("resetBtn"), "初期値にリセット", "本当に戻す？（もう一度クリック）", function () {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(PRIMARY_STORAGE_KEY);
+    localStorage.removeItem(PROFILE_STORAGE_KEY);
+    localStorage.removeItem(REFLECTION_STORAGE_KEY);
+    profile = loadProfile();
+    AGE_START = profile.rangeStart;
+    AGE_MAX = profile.rangeEnd;
+    updateProfileDisplay();
+    saveProfile();
+    reflection = loadReflection();
+    renderQuoteCard();
+    selectedId = null;
+    clearDetailPanel();
+    rebuildData();
+    PRIMARY_DATA = rebuildPrimaryData();
+    renderChart();
+    buildPrimaryTable();
+    buildTable();
+  });
+
+  // ── 初期描画 ───────────────────────────────────────────────
+  renderChart();
+  buildPrimaryTable();
+  buildTable();
+
+})();
+</script>
+</body>
+</html>
